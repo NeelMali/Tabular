@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TableForge — AI Document Extractor</title>
+  <meta name="description" content="Extract structured data tables from any document using AI. Supports PDF, Excel, Word, CSV, and images.">
+  <meta name="theme-color" content="#0f0f0f">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/src/styles/index.css">
+  <link rel="stylesheet" href="/src/styles/components.css">
+  <link rel="stylesheet" href="/src/styles/animations.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top bar -->
+    <nav class="topbar" id="topbar">
+      <div class="topbar-left">
+        <div class="logo">
+          <div class="logo-icon">
+            <i class="ti ti-table-import"></i>
+          </div>
+          <span class="logo-text">TableForge</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn-ghost" id="historyToggle" title="Extraction history">
+          <i class="ti ti-history"></i>
+          <span class="btn-label">History</span>
+        </button>
+        <button class="btn-ghost" id="themeToggle" title="Toggle dark mode">
+          <i class="ti ti-moon"></i>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main layout -->
+    <div class="layout">
+      <!-- History sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <h3>Extraction History</h3>
+          <button class="btn-icon-sm" id="sidebarClose" title="Close">
+            <i class="ti ti-x"></i>
+          </button>
+        </div>
+        <div class="sidebar-content" id="historyList">
+          <div class="empty-state">
+            <i class="ti ti-archive-off"></i>
+            <p>No extractions yet</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main content -->
+      <main class="main">
+        <!-- Hero -->
+        <section class="hero">
+          <h1 class="hero-title">
+            Extract structured data from <span class="gradient-text">any document</span>
+          </h1>
+          <p class="hero-subtitle">Upload a document, define your columns, and let AI extract perfectly structured tables in seconds.</p>
+        </section>
+
+        <!-- Steps container -->
+        <div class="steps">
+
+          <!-- Step 1: Upload -->
+          <div class="card step-card" id="uploadCard">
+            <div class="step-badge">1</div>
+            <div class="card-header">
+              <h2><i class="ti ti-upload"></i> Upload Document</h2>
+            </div>
+            <div class="drop-zone" id="dropZone">
+              <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx,.csv,.jpg,.jpeg,.png,.webp">
+              <div class="dz-content">
+                <div class="dz-icon-wrap">
+                  <i class="ti ti-cloud-upload"></i>
+                </div>
+                <div class="dz-title">Drop your file here</div>
+                <div class="dz-sub">or click to browse</div>
+                <div class="format-pills">
+                  <span class="format-pill">PDF</span>
+                  <span class="format-pill">Excel</span>
+                  <span class="format-pill">Word</span>
+                  <span class="format-pill">CSV</span>
+                  <span class="format-pill">Image</span>
+                </div>
+              </div>
+            </div>
+            <div id="fileBadge"></div>
+          </div>
+
+          <!-- Step 2: Columns -->
+          <div class="card step-card" id="columnsCard">
+            <div class="step-badge">2</div>
+            <div class="card-header">
+              <h2><i class="ti ti-columns-3"></i> Define Columns</h2>
+              <p class="card-desc">Specify the data fields you want to extract</p>
+            </div>
+            <div id="colList"></div>
+            <button class="btn-add" id="addCol">
+              <i class="ti ti-plus"></i>
+              <span>Add column</span>
+            </button>
+          </div>
+
+          <!-- Step 3: Extract -->
+          <div class="card step-card" id="extractCard">
+            <div class="step-badge">3</div>
+            <div class="card-header">
+              <h2><i class="ti ti-sparkles"></i> Extract Data</h2>
+            </div>
+            <div class="extract-actions">
+              <button class="btn-primary" id="extractBtn" disabled>
+                <i class="ti ti-sparkles"></i>
+                <span>Extract Data</span>
+              </button>
+              <span class="ready-hint" id="readyHint">Upload a file and add columns to begin</span>
+            </div>
+            <div class="progress-bar" id="progressBar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="resultSection" class="result-section" style="display:none;">
+          <div class="card result-card">
+            <div class="result-header">
+              <div class="result-title">
+                <i class="ti ti-table"></i>
+                <h2>Extracted Data</h2>
+                <span class="badge" id="rowBadge"></span>
+              </div>
+              <div class="export-row" id="exportRow">
+                <button class="btn-outline" id="exportCsv">
+                  <i class="ti ti-file-type-csv"></i>
+                  <span>CSV</span>
+                </button>
+                <button class="btn-outline" id="exportXlsx">
+                  <i class="ti ti-file-spreadsheet"></i>
+                  <span>Excel</span>
+                </button>
+                <button class="btn-outline" id="exportJson">
+                  <i class="ti ti-braces"></i>
+                  <span>JSON</span>
+                </button>
+              </div>
+            </div>
+            <div class="table-wrap" id="tableWrap"></div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+          <p>Built with <i class="ti ti-heart-filled" style="color: var(--danger);"></i> and NVIDIA Gemma 4 AI</p>
+        </footer>
+      </main>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

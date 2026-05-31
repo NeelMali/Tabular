@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Document → Table Extractor</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --surface2: #f0efe9;
+    --border: rgba(0,0,0,0.1);
+    --border2: rgba(0,0,0,0.18);
+    --text: #1a1a18;
+    --text2: #5a5a54;
+    --text3: #9a9a90;
+    --accent: #1a1a18;
+    --accent-fg: #ffffff;
+    --info-bg: #e8f0fe;
+    --info-fg: #1a56b0;
+    --success-bg: #e6f4ea;
+    --success-fg: #1e6e39;
+    --danger-bg: #fce8e6;
+    --danger-fg: #b31412;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413;
+      --surface: #1e1e1c;
+      --surface2: #262624;
+      --border: rgba(255,255,255,0.09);
+      --border2: rgba(255,255,255,0.16);
+      --text: #f0efe9;
+      --text2: #a0a098;
+      --text3: #606058;
+      --accent: #f0efe9;
+      --accent-fg: #141413;
+      --info-bg: #0d1f3c;
+      --info-fg: #7ab3f5;
+      --success-bg: #0d2418;
+      --success-fg: #5ec47a;
+      --danger-bg: #2c0d0c;
+      --danger-fg: #f08a88;
+    }
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  .container {
+    max-width: 780px;
+    margin: 0 auto;
+  }
+
+  header {
+    margin-bottom: 2rem;
+  }
+
+  header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  header h1 .icon {
+    width: 36px;
+    height: 36px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  header p {
+    font-size: 14px;
+    color: var(--text2);
+    margin-top: 6px;
+    padding-left: 46px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .section-label i {
+    font-size: 14px;
+    color: var(--text2);
+  }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 2rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    position: relative;
+    background: var(--surface2);
+  }
+
+  .drop-zone:hover, .drop-zone.drag {
+    background: var(--bg);
+    border-color: var(--text2);
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .drop-zone .dz-icon {
+    font-size: 32px;
+    color: var(--text3);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .drop-zone .dz-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .drop-zone .dz-sub {
+    font-size: 12px;
+    color: var(--text3);
+    margin-top: 4px;
+  }
+
+  .format-pills {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .format-pill {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 0.5px solid var(--border2);
+    color: var(--text2);
+  }
+
+  .file-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--info-bg);
+    color: var(--info-fg);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    margin-top: 0.75rem;
+  }
+
+  /* Columns */
+  .col-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 7px;
+  }
+
+  .col-num {
+    font-size: 11px;
+    color: var(--text3);
+    min-width: 18px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .col-row input {
+    flex: 1;
+    font-size: 13px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+  }
+
+  .col-row input:focus {
+    border-color: var(--text2);
+    box-shadow: 0 0 0 3px rgba(100,100,100,0.08);
+    background: var(--surface);
+  }
+
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+    font-size: 15px;
+    transition: background 0.1s, color 0.1s;
+    flex-shrink: 0;
+  }
+
+  .btn-icon:hover {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  .btn-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text2);
+    background: transparent;
+    border: 0.5px dashed var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    cursor: pointer;
+    width: 100%;
+    justify-content: center;
+    margin-top: 6px;
+    transition: background 0.1s, color 0.1s;
+    font-family: inherit;
+  }
+
+  .btn-add:hover {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  /* API Key */
+  .api-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .api-row input {
+    flex: 1;
+    font-size: 13px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    outline: none;
+    font-family: monospace;
+    transition: border-color 0.15s;
+  }
+
+  .api-row input:focus {
+    border-color: var(--text2);
+    background: var(--surface);
+  }
+
+  .key-hint {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 7px;
+    line-height: 1.5;
+  }
+
+  .key-hint a {
+    color: var(--info-fg);
+    text-decoration: none;
+  }
+
+  .key-hint a:hover { text-decoration: underline; }
+
+  /* Extract button */
+  .extract-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+  }
+
+  .btn-main {
+    height: 42px;
+    padding: 0 1.5rem;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: opacity 0.15s, transform 0.1s;
+    font-family: inherit;
+  }
+
+  .btn-main:hover:not(:disabled) { opacity: 0.85; }
+  .btn-main:active:not(:disabled) { transform: scale(0.98); }
+  .btn-main:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .ready-hint {
+    font-size: 12px;
+    color: var(--text3);
+  }
+
+  /* Status */
+  .status {
+    font-size: 13px;
+    padding: 9px 14px;
+    border-radius: var(--radius-sm);
+    margin-top: 0.75rem;
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status.info { background: var(--info-bg); color: var(--info-fg); display: flex; }
+  .status.err  { background: var(--danger-bg); color: var(--danger-fg); display: flex; }
+  .status.ok   { background: var(--success-bg); color: var(--success-fg); display: flex; }
+
+  /* Spinner */
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: var(--accent-fg);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Result table */
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 1rem;
+  }
+
+  .export-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-outline {
+    height: 34px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.1s;
+    font-family: inherit;
+  }
+
+  .btn-outline:hover { background: var(--surface2); }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--surface2);
+    color: var(--text2);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 9px 14px;
+    border-bottom: 0.5px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 0.5px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+
+  .null-cell {
+    color: var(--text3);
+    font-style: italic;
+    font-size: 12px;
+  }
+
+  .row-count {
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 8px;
+    text-align: right;
+  }
+
+  .divider {
+    height: 0.5px;
+    background: var(--border);
+    margin: 1.5rem 0;
+  }
+
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 2rem;
+    padding-bottom: 1rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <h1>
+      <span class="icon"><i class="ti ti-table-import" aria-hidden="true"></i></span>
+      Document → Table Extractor
+    </h1>
+    <p>Upload any file, define your columns, extract structured data with AI</p>
+  </header>
+
+  <!-- Step 1: Upload -->
+  <div class="card">
+    <div class="section-label"><i class="ti ti-upload" aria-hidden="true"></i> Step 1 — Upload file</div>
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.docx,.csv,.jpg,.jpeg,.png,.webp">
+      <i class="ti ti-cloud-upload dz-icon" aria-hidden="true"></i>
+      <div class="dz-title">Drop file here or click to browse</div>
+      <div class="dz-sub">Supports all major document formats</div>
+      <div class="format-pills">
+        <span class="format-pill">PDF</span>
+        <span class="format-pill">Excel</span>
+        <span class="format-pill">Word</span>
+        <span class="format-pill">CSV</span>
+        <span class="format-pill">Image</span>
+      </div>
+    </div>
+    <div id="fileBadge"></div>
+  </div>
+
+  <!-- Step 2: Columns -->
+  <div class="card">
+    <div class="section-label"><i class="ti ti-columns" aria-hidden="true"></i> Step 2 — Define output columns</div>
+    <div id="colList"></div>
+    <button class="btn-add" id="addCol">
+      <i class="ti ti-plus" aria-hidden="true"></i> Add column
+    </button>
+  </div>
+
+  <!-- Step 3: API Key -->
+  <div class="card">
+    <div class="section-label"><i class="ti ti-key" aria-hidden="true"></i> Step 3 — Google AI API key</div>
+    <div class="api-row">
+      <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off" spellcheck="false">
+      <button class="btn-icon" id="toggleKey" title="Show/hide key">
+        <i class="ti ti-eye" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="key-hint">
+      Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>
+      &nbsp;·&nbsp; Your key is never stored — it stays in this browser session only.
+    </div>
+  </div>
+
+  <!-- Extract -->
+  <div class="extract-row">
+    <button class="btn-main" id="extractBtn" disabled>
+      <i class="ti ti-sparkles" aria-hidden="true"></i> Extract data
+    </button>
+    <span class="ready-hint" id="readyHint">Upload a file and add columns to begin</span>
+  </div>
+  <div class="status" id="status"></div>
+
+  <!-- Result -->
+  <div id="resultSection" style="display:none">
+    <div class="divider"></div>
+    <div class="card">
+      <div class="result-header">
+        <div class="section-label" style="margin:0"><i class="ti ti-table" aria-hidden="true"></i> Extracted table</div>
+        <div class="export-row">
+          <button class="btn-outline" id="exportCsv">
+            <i class="ti ti-file-type-csv" aria-hidden="true"></i> Download CSV
+          </button>
+          <button class="btn-outline" id="exportXlsx">
+            <i class="ti ti-file-spreadsheet" aria-hidden="true"></i> Download Excel
+          </button>
+        </div>
+      </div>
+      <div class="table-wrap" id="tableWrap"></div>
+      <div class="row-count" id="rowCount"></div>
+    </div>
+  </div>
+
+  <footer>
+    Built with Google Gemini 2.0 Flash · pdf.js · SheetJS · mammoth.js · PapaParse
+  </footer>
+
+</div>
+
+<script>
+  // PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ── State ──
+  let rawText = '';
+  let fileName = '';
+  let columns = ['Name', 'Surname', 'Phone Number', 'Email'];
+  let tableData = [];
+
+  // ── DOM refs ──
+  const dropZone    = document.getElementById('dropZone');
+  const fileInput   = document.getElementById('fileInput');
+  const fileBadge   = document.getElementById('fileBadge');
+  const colList     = document.getElementById('colList');
+  const addColBtn   = document.getElementById('addCol');
+  const apiKeyEl    = document.getElementById('apiKey');
+  const toggleKeyBtn= document.getElementById('toggleKey');
+  const extractBtn  = document.getElementById('extractBtn');
+  const readyHint   = document.getElementById('readyHint');
+  const statusEl    = document.getElementById('status');
+  const resultSection = document.getElementById('resultSection');
+  const tableWrap   = document.getElementById('tableWrap');
+  const rowCountEl  = document.getElementById('rowCount');
+
+  // ── Status helpers ──
+  function setStatus(msg, type) {
+    statusEl.className = 'status ' + type;
+    statusEl.innerHTML = `<i class="ti ti-info-circle" style="flex-shrink:0"></i> ${msg}`;
+  }
+  function clearStatus() {
+    statusEl.className = 'status';
+  }
+
+  // ── Readiness check ──
+  function checkReady() {
+    const cols = columns.filter(c => c.trim());
+    const key  = apiKeyEl.value.trim();
+    const ok   = rawText && cols.length > 0 && key;
+    extractBtn.disabled = !ok;
+    if (!rawText)        readyHint.textContent = 'Upload a file to begin';
+    else if (!cols.length) readyHint.textContent = 'Add at least one column';
+    else if (!key)       readyHint.textContent = 'Enter your Google AI API key';
+    else                 readyHint.textContent = '✓ Ready to extract!';
+  }
+
+  // ── Drag & drop ──
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  // ── File handler ──
+  async function handleFile(file) {
+    fileName = file.name;
+    const ext = file.name.split('.').pop().toLowerCase();
+    fileBadge.innerHTML = `<div class="file-badge"><i class="ti ti-file-check" aria-hidden="true"></i> ${file.name}</div>`;
+    setStatus('Reading file...', 'info');
+    rawText = '';
+    try {
+      if (ext === 'pdf')                        rawText = await readPdf(file);
+      else if (ext === 'csv')                   rawText = await readCsv(file);
+      else if (['xlsx','xls'].includes(ext))    rawText = await readXlsx(file);
+      else if (ext === 'docx')                  rawText = await readDocx(file);
+      else if (['jpg','jpeg','png','webp'].includes(ext)) rawText = await readImage(file);
+      else throw new Error('Unsupported file type: .' + ext);
+      setStatus('File read — ' + rawText.length.toLocaleString() + ' characters extracted', 'ok');
+      setTimeout(clearStatus, 3000);
+    } catch(e) {
+      setStatus('Error reading file: ' + e.message, 'err');
+    }
+    checkReady();
+  }
+
+  // ── File readers ──
+  async function readPdf(file) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(s => s.str).join(' ') + '\n';
+    }
+    return text;
+  }
+
+  async function readCsv(file) {
+    return new Promise((res, rej) => {
+      Papa.parse(file, {
+        complete: r => res(r.data.map(row => row.join('\t')).join('\n')),
+        error: e => rej(e)
+      });
+    });
+  }
+
+  async function readXlsx(file) {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    let text = '';
+    wb.SheetNames.forEach(name => {
+      const ws = wb.Sheets[name];
+      text += 'Sheet: ' + name + '\n' + XLSX.utils.sheet_to_csv(ws) + '\n\n';
+    });
+    return text;
+  }
+
+  async function readDocx(file) {
+    const buf = await file.arrayBuffer();
+    const res = await mammoth.extractRawText({ arrayBuffer: buf });
+    return res.value;
+  }
+
+  async function readImage(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res('__IMAGE__:' + r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+
+  // ── Column management ──
+  function renderColumns() {
+    colList.innerHTML = '';
+    columns.forEach((col, i) => {
+      const row = document.createElement('div');
+      row.className = 'col-row';
+      row.innerHTML = `
+        <span class="col-num">${i + 1}</span>
+        <input type="text" value="${col}" placeholder="Column name e.g. Phone Number" data-idx="${i}">
+        <button class="btn-icon del-btn" data-idx="${i}" title="Remove column">
+          <i class="ti ti-trash" aria-hidden="true"></i>
+        </button>`;
+      colList.appendChild(row);
+    });
+    colList.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', e => {
+        columns[+e.target.dataset.idx] = e.target.value;
+        checkReady();
+      });
+    });
+    colList.querySelectorAll('.del-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        columns.splice(+btn.dataset.idx, 1);
+        renderColumns();
+        checkReady();
+      });
+    });
+  }
+
+  addColBtn.addEventListener('click', () => {
+    columns.push('');
+    renderColumns();
+    const inputs = colList.querySelectorAll('input');
+    inputs[inputs.length - 1]?.focus();
+    checkReady();
+  });
+
+  renderColumns();
+
+  // ── API Key toggle ──
+  toggleKeyBtn.addEventListener('click', () => {
+    apiKeyEl.type = apiKeyEl.type === 'password' ? 'text' : 'password';
+    toggleKeyBtn.querySelector('i').className =
+      apiKeyEl.type === 'password' ? 'ti ti-eye' : 'ti ti-eye-off';
+  });
+  apiKeyEl.addEventListener('input', checkReady);
+
+  // ── Extract ──
+  extractBtn.addEventListener('click', async () => {
+    const cols = columns.filter(c => c.trim());
+    const key  = apiKeyEl.value.trim();
+    if (!rawText || !cols.length || !key) return;
+
+    extractBtn.disabled = true;
+    extractBtn.innerHTML = '<span class="spinner"></span> Extracting...';
+    setStatus('Sending to Google Gemini AI...', 'info');
+    resultSection.style.display = 'none';
+
+    try {
+      const isImage = rawText.startsWith('__IMAGE__:');
+
+      const systemPrompt = `You are a data extraction expert. Extract structured data from the provided document into rows matching the given column names.
+Return ONLY a valid JSON array of objects. No explanation, no markdown, no backticks.
+Each object represents one row of data. Keys must exactly match the column names provided.
+Use null for any value that is not found. Extract ALL records found in the document.
+Do not hallucinate or guess data. Only extract what is clearly present.
+If no relevant data is found, return an empty array [].`;
+
+      const userText = `Extract the following columns: ${cols.join(', ')}\n\nReturn a JSON array of all records found.`;
+
+      let messages;
+
+      if (isImage) {
+        const b64full = rawText.replace('__IMAGE__:', '');
+        messages = [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: b64full } },
+            { type: 'text', text: userText }
+          ]
+        }];
+      } else {
+        const truncated = rawText.slice(0, 30000);
+        messages = [{
+          role: 'user',
+          content: `Document text:\n"""\n${truncated}\n"""\n\n${userText}`
+        }];
+      }
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=${key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gemini-2.0-flash',
+            max_tokens: 4096,
+            messages: [{ role: 'system', content: systemPrompt }, ...messages]
+          })
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || 'API error ' + res.status);
+      }
+
+      const data = await res.json();
+      let content = data.choices?.[0]?.message?.content || '';
+      content = content.replace(/```json|```/g, '').trim();
+
+      const parsed = JSON.parse(content);
+      if (!Array.isArray(parsed)) throw new Error('AI returned an unexpected format. Try again.');
+
+      tableData = parsed;
+      renderTable(cols, tableData);
+      setStatus('Successfully extracted ' + tableData.length + ' row' + (tableData.length === 1 ? '' : 's'), 'ok');
+
+    } catch(e) {
+      setStatus('Error: ' + e.message, 'err');
+      console.error(e);
+    }
+
+    extractBtn.disabled = false;
+    extractBtn.innerHTML = '<i class="ti ti-sparkles" aria-hidden="true"></i> Extract data';
+    checkReady();
+  });
+
+  // ── Render table ──
+  function renderTable(cols, data) {
+    resultSection.style.display = 'block';
+
+    if (data.length === 0) {
+      tableWrap.innerHTML = '<p style="font-size:13px;color:var(--text2);padding:1rem">No records found for the given columns.</p>';
+      rowCountEl.textContent = '';
+      return;
+    }
+
+    let html = '<table><thead><tr>';
+    cols.forEach(c => { html += `<th>${c}</th>`; });
+    html += '</tr></thead><tbody>';
+
+    data.forEach(row => {
+      html += '<tr>';
+      cols.forEach(c => {
+        const val = row[c];
+        if (val === null || val === undefined || val === '') {
+          html += `<td class="null-cell">—</td>`;
+        } else {
+          const safe = String(val).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += `<td title="${safe}">${safe}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    tableWrap.innerHTML = html;
+    rowCountEl.textContent = data.length + ' row' + (data.length === 1 ? '' : 's') + ' extracted';
+  }
+
+  // ── Export CSV ──
+  document.getElementById('exportCsv').addEventListener('click', () => {
+    if (!tableData.length) return;
+    const cols = columns.filter(c => c.trim());
+    const rows = [
+      cols.join(','),
+      ...tableData.map(r =>
+        cols.map(c => {
+          const v = r[c] ?? '';
+          return '"' + String(v).replace(/"/g, '""') + '"';
+        }).join(',')
+      )
+    ];
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (fileName || 'extracted') + '_data.csv';
+    a.click();
+  });
+
+  // ── Export Excel ──
+  document.getElementById('exportXlsx').addEventListener('click', () => {
+    if (!tableData.length) return;
+    const cols = columns.filter(c => c.trim());
+    const rows = tableData.map(r => {
+      const o = {};
+      cols.forEach(c => { o[c] = r[c] ?? ''; });
+      return o;
+    });
+    const ws = XLSX.utils.json_to_sheet(rows, { header: cols });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Extracted Data');
+    XLSX.writeFile(wb, (fileName || 'extracted') + '_data.xlsx');
+  });
+</script>
+</body>
+</html>
