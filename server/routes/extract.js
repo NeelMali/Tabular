@@ -1,51 +1,37 @@
 import { Router } from 'express';
 import upload, { cleanupFile } from '../middleware/upload.js';
 import extractionLimiter from '../middleware/rateLimiter.js';
-import { parseDocument, getFileType, detectColumns } from '../services/parser.js';
-import { extractWithAI, detectColumnsWithAI, getProviderList } from '../services/gemini.js';
+import {
+  parseDocument,
+  parseStructured,
+  detectColumns,
+  getFileType,
+  isStructuredFile,
+} from '../services/parser.js';
+import { extractWithAI, detectColumnsWithAI } from '../services/ai.js';
 import {
   insertExtraction,
   getAllExtractions,
   getExtractionById,
-  deleteExtraction
+  deleteExtraction,
 } from '../db/database.js';
 
 const router = Router();
 
-/**
- * Helper: extract AI options from request body.
- */
-function getAIOptions(body) {
-  return {
-    provider: body.provider || 'groq',
-    model: body.model || undefined,
-    apiKey: body.apiKey || undefined,
-  };
-}
+// ── POST /api/extract ────────────────────────────────────────────────────────
 
-/**
- * GET /api/providers
- * List available AI providers and their models.
- */
-router.get('/providers', (_req, res) => {
-  res.json(getProviderList());
-});
-
-/**
- * POST /api/extract
- * Upload a file + provide columns → extract structured data.
- */
 router.post('/extract', extractionLimiter, upload.single('file'), async (req, res, next) => {
   let filePath = null;
 
   try {
     if (!req.file) {
-      const err = new Error('No file uploaded. Please attach a document.');
+      const err = new Error('No file uploaded.');
       err.statusCode = 400;
       throw err;
     }
     filePath = req.file.path;
 
+    // Parse column list
     let columns;
     try {
       columns = JSON.parse(req.body.columns || '[]');
@@ -55,39 +41,42 @@ router.post('/extract', extractionLimiter, upload.single('file'), async (req, re
       throw err;
     }
 
-    if (!Array.isArray(columns) || columns.length === 0) {
+    columns = columns.map(c => String(c).trim()).filter(Boolean);
+    if (!columns.length) {
       const err = new Error('At least one column is required.');
       err.statusCode = 400;
       throw err;
     }
 
-    columns = columns.map(c => String(c).trim()).filter(Boolean);
-    if (columns.length === 0) {
-      const err = new Error('All column names are empty.');
-      err.statusCode = 400;
-      throw err;
+    const originalName = req.file.originalname;
+    let result;
+
+    if (isStructuredFile(originalName)) {
+      // ── Excel / CSV: parse directly — all rows, no AI ──
+      console.log(`  📋 Structured file detected — parsing directly (${originalName})`);
+      result = parseStructured(filePath, originalName, columns);
+    } else {
+      // ── PDF / Word / Image: send to Claude ──
+      const { text, isImage } = await parseDocument(filePath, originalName);
+      result = await extractWithAI(text, columns, isImage);
     }
 
-    const { text, isImage } = await parseDocument(filePath, req.file.originalname);
-    const aiOpts = getAIOptions(req.body);
-    const result = await extractWithAI(text, columns, isImage, aiOpts);
-
-    const fileType = getFileType(req.file.originalname);
+    const fileType = getFileType(originalName);
     const id = insertExtraction({
-      filename: req.file.originalname,
+      filename: originalName,
       columns,
       result,
       rowCount: result.length,
-      fileType
+      fileType,
     });
 
     res.json({
       id: Number(id),
-      filename: req.file.originalname,
+      filename: originalName,
       fileType,
       columns,
       data: result,
-      rowCount: result.length
+      rowCount: result.length,
     });
 
   } catch (err) {
@@ -97,10 +86,8 @@ router.post('/extract', extractionLimiter, upload.single('file'), async (req, re
   }
 });
 
-/**
- * POST /api/detect-columns
- * Upload a file → auto-detect column headers.
- */
+// ── POST /api/detect-columns ─────────────────────────────────────────────────
+
 router.post('/detect-columns', upload.single('file'), async (req, res, next) => {
   let filePath = null;
 
@@ -118,21 +105,20 @@ router.post('/detect-columns', upload.single('file'), async (req, res, next) => 
       return res.json({
         columns: detection.columns,
         method: 'direct',
-        fileType: getFileType(req.file.originalname)
+        fileType: getFileType(req.file.originalname),
       });
     }
 
-    const aiOpts = getAIOptions(req.body);
+    // AI detection for unstructured documents
     const columns = await detectColumnsWithAI(
       detection.preview || '',
-      detection.isImage || false,
-      aiOpts
+      detection.isImage || false
     );
 
     res.json({
       columns,
       method: 'ai',
-      fileType: getFileType(req.file.originalname)
+      fileType: getFileType(req.file.originalname),
     });
 
   } catch (err) {
@@ -142,17 +128,14 @@ router.post('/detect-columns', upload.single('file'), async (req, res, next) => 
   }
 });
 
-/**
- * GET /api/extractions
- */
+// ── GET /api/extractions ──────────────────────────────────────────────────────
+
 router.get('/extractions', (_req, res) => {
-  const extractions = getAllExtractions(50);
-  res.json(extractions);
+  res.json(getAllExtractions(50));
 });
 
-/**
- * GET /api/extractions/:id
- */
+// ── GET /api/extractions/:id ──────────────────────────────────────────────────
+
 router.get('/extractions/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid extraction ID.' });
@@ -161,9 +144,8 @@ router.get('/extractions/:id', (req, res) => {
   res.json(extraction);
 });
 
-/**
- * DELETE /api/extractions/:id
- */
+// ── DELETE /api/extractions/:id ───────────────────────────────────────────────
+
 router.delete('/extractions/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid extraction ID.' });

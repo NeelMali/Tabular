@@ -1,7 +1,7 @@
 {
   "name": "doc-table-extractor",
   "version": "1.0.0",
-  "description": "Production-grade document to structured table extractor powered by NVIDIA Gemma 4 AI",
+  "description": "Document to structured table extractor powered by Claude AI",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"npm run dev:server\" \"npm run dev:client\"",
@@ -22,7 +22,8 @@
     "multer": "^1.4.5-lts.1",
     "papaparse": "^5.4.1",
     "pdf-parse": "^1.1.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@anthropic-ai/sdk": "^0.52.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

@@ -42,15 +42,6 @@ export async function detectColumns(file) {
 }
 
 /**
- * Get available AI providers and models.
- */
-export async function getProviders() {
-  const res = await fetch(`${API_BASE}/providers`);
-  if (!res.ok) throw new Error('Failed to fetch providers');
-  return res.json();
-}
-
-/**
  * Get extraction history.
  */
 export async function getHistory() {
