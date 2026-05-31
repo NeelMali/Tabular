@@ -1,15 +1,15 @@
 /**
- * AI service — routes to Anthropic Claude by default.
- * For structured files (Excel/CSV), extraction is handled directly by the parser.
- * AI is only used for unstructured documents: PDF, Word, and Images.
+ * AI service — calls Anthropic Claude API directly via fetch.
+ * No external SDK required.
+ *
+ * Only used for unstructured documents (PDF, Word, Image).
+ * Excel/CSV are parsed directly by parser.js — no AI needed.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-
-// ── Config ──────────────────────────────────────────────────────────────────
-
 const DEFAULT_MODEL  = 'claude-sonnet-4-20250514';
-const MAX_TEXT_CHARS = 100_000; // ~75k tokens — well within Claude's 200k context
+const API_URL        = 'https://api.anthropic.com/v1/messages';
+const API_VERSION    = '2023-06-01';
+const MAX_TEXT_CHARS  = 100_000;
 
 // ── Prompts ─────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ Rules:
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function getClient() {
+function getApiKey() {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     throw Object.assign(
@@ -41,12 +41,48 @@ function getClient() {
       { statusCode: 503 }
     );
   }
-  return new Anthropic({ apiKey: key });
+  return key;
+}
+
+async function callClaude(system, messages, maxTokens = 8192) {
+  const apiKey = getApiKey();
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': API_VERSION,
+    },
+    body: JSON.stringify({
+      model: DEFAULT_MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.error(`  ❌ Claude API error (${res.status}): ${body}`);
+    throw Object.assign(
+      new Error(`Claude API error: ${res.status} — ${body.slice(0, 200)}`),
+      { statusCode: 502 }
+    );
+  }
+
+  const data = await res.json();
+
+  if (data.usage) {
+    console.log(`  📊 Claude (${DEFAULT_MODEL}) — input: ${data.usage.input_tokens}, output: ${data.usage.output_tokens} tokens`);
+  }
+
+  const text = data.content?.find(b => b.type === 'text')?.text || '';
+  return text;
 }
 
 function parseJSON(raw) {
-  // Strip any accidental markdown fences
-  const cleaned = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
   return JSON.parse(cleaned);
 }
 
@@ -55,25 +91,17 @@ function parseJSON(raw) {
 /**
  * Extract structured data from a document using Claude.
  * Only called for PDF / Word / Image — Excel & CSV are parsed directly.
- *
- * @param {string}   content  - Text content or base64 data URI (for images)
- * @param {string[]} columns  - Column names to extract
- * @param {boolean}  isImage  - Whether content is an image data URI
- * @returns {Object[]} Array of row objects
  */
 export async function extractWithAI(content, columns, isImage) {
-  const client = getClient();
-
   let userContent;
 
   if (isImage) {
-    // Claude vision: send image as base64
-    const [meta, data] = content.split(',');
+    const [meta, b64data] = content.split(',');
     const mediaType = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
     userContent = [
       {
         type: 'image',
-        source: { type: 'base64', media_type: mediaType, data },
+        source: { type: 'base64', media_type: mediaType, data: b64data },
       },
       {
         type: 'text',
@@ -85,14 +113,7 @@ export async function extractWithAI(content, columns, isImage) {
     userContent = `Extract these columns: ${columns.join(', ')}\n\nDocument:\n"""\n${truncated}\n"""\n\nReturn ALL rows. Output JSON only.`;
   }
 
-  const msg = await client.messages.create({
-    model: DEFAULT_MODEL,
-    max_tokens: 8192,
-    system: EXTRACT_SYSTEM,
-    messages: [{ role: 'user', content: userContent }],
-  });
-
-  const raw = msg.content.find(b => b.type === 'text')?.text || '{"data":[]}';
+  const raw = await callClaude(EXTRACT_SYSTEM, [{ role: 'user', content: userContent }]);
 
   let parsed;
   try {
@@ -111,30 +132,23 @@ export async function extractWithAI(content, columns, isImage) {
     );
   }
 
-  console.log(`  📊 Claude (${DEFAULT_MODEL}) — extracted ${parsed.data.length} rows | tokens: ${msg.usage?.input_tokens}→${msg.usage?.output_tokens}`);
-
+  console.log(`  ✅ Extracted ${parsed.data.length} rows`);
   return parsed.data;
 }
 
 /**
  * Detect column headers from an unstructured document using Claude.
- *
- * @param {string}  preview   - First ~3000 chars of document text, or base64 image URI
- * @param {boolean} isImage   - Whether preview is an image
- * @returns {string[]} Array of detected column names
  */
 export async function detectColumnsWithAI(preview, isImage) {
-  const client = getClient();
-
   let userContent;
 
   if (isImage) {
-    const [meta, data] = preview.split(',');
+    const [meta, b64data] = preview.split(',');
     const mediaType = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
     userContent = [
       {
         type: 'image',
-        source: { type: 'base64', media_type: mediaType, data },
+        source: { type: 'base64', media_type: mediaType, data: b64data },
       },
       { type: 'text', text: 'Detect the column names/fields in this image. Output JSON only.' },
     ];
@@ -142,14 +156,7 @@ export async function detectColumnsWithAI(preview, isImage) {
     userContent = `Detect the column names from this document excerpt:\n\n"""\n${preview}\n"""\n\nOutput JSON only.`;
   }
 
-  const msg = await client.messages.create({
-    model: DEFAULT_MODEL,
-    max_tokens: 1024,
-    system: DETECT_SYSTEM,
-    messages: [{ role: 'user', content: userContent }],
-  });
-
-  const raw = msg.content.find(b => b.type === 'text')?.text || '{"columns":[]}';
+  const raw = await callClaude(DETECT_SYSTEM, [{ role: 'user', content: userContent }], 1024);
 
   try {
     const parsed = parseJSON(raw);

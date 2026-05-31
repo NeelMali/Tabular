@@ -5,7 +5,7 @@ Upload a document, define what columns you want, and get a clean, editable data 
 ## Features
 
 - **Formats** — PDF, Excel (.xlsx/.xls), Word (.docx), CSV, Images (JPG, PNG, WebP)
-- **AI Extraction** — Powered by [Groq](https://console.groq.com) (Llama 4 Scout) by default; configurable via `.env`
+- **Smart extraction** — Excel/CSV files are parsed directly (all rows, instant). PDF/Word/Image use Claude AI.
 - **Auto-detect columns** — Let AI suggest headers from your document
 - **Inline editing** — Click any cell to edit; add/delete rows and columns after extraction
 - **Export** — Download as CSV, Excel, or JSON
@@ -26,14 +26,15 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` — at minimum add one API key:
+Edit `.env`:
 
 ```env
-GROQ_API_KEY=your_key_here
-# GOOGLE_API_KEY=...
-# OPENAI_API_KEY=...
-# ANTHROPIC_API_KEY=...
+ANTHROPIC_API_KEY=your_claude_api_key_here
 ```
+
+Get a key at [console.anthropic.com](https://console.anthropic.com)
+
+> **Note:** An API key is only needed for PDF, Word, and Image files. Excel and CSV files are parsed directly — no AI required.
 
 ### 3. Run
 
@@ -56,8 +57,8 @@ Serves everything from Express on port 3000.
 ├── server/
 │   ├── index.js               # Express server
 │   ├── routes/extract.js      # API routes
-│   ├── services/parser.js     # Document parsing
-│   ├── services/gemini.js     # Multi-provider AI
+│   ├── services/ai.js         # Claude AI (PDF/Word/Image only)
+│   ├── services/parser.js     # Document parsing + direct Excel/CSV extraction
 │   ├── db/database.js         # SQLite
 │   └── middleware/            # Upload, rate-limit, errors
 ├── client/
@@ -75,10 +76,7 @@ Serves everything from Express on port 3000.
 
 | Variable | Default | Description |
 |---|---|---|
-| `GROQ_API_KEY` | — | Groq API key (default provider) |
-| `GOOGLE_API_KEY` | — | Google Gemini API key |
-| `OPENAI_API_KEY` | — | OpenAI API key |
-| `ANTHROPIC_API_KEY` | — | Anthropic Claude API key |
+| `ANTHROPIC_API_KEY` | — | Claude API key (required for PDF/Word/Image) |
 | `PORT` | `3000` | Server port |
 | `MAX_FILE_SIZE_MB` | `20` | Max upload size |
 | `RATE_LIMIT_PER_MIN` | `10` | Extraction rate limit |
@@ -88,20 +86,8 @@ Serves everything from Express on port 3000.
 ### `POST /api/extract`
 Upload a file and extract structured data.
 
-**Body** (multipart/form-data):
-- `file` — Document
-- `columns` — JSON array, e.g. `'["Name","Email","Phone"]'`
-
-**Response:**
-```json
-{
-  "id": 1,
-  "filename": "contacts.pdf",
-  "columns": ["Name", "Email"],
-  "data": [{ "Name": "Jane", "Email": "jane@example.com" }],
-  "rowCount": 1
-}
-```
+- Excel/CSV → parsed directly, returns **all rows**
+- PDF/Word/Image → sent to Claude AI
 
 ### `POST /api/detect-columns`
 Auto-detect column headers from a document.
@@ -109,11 +95,8 @@ Auto-detect column headers from a document.
 ### `GET /api/extractions`
 List last 50 extractions.
 
-### `GET /api/extractions/:id`
-Get a specific extraction.
-
-### `DELETE /api/extractions/:id`
-Delete an extraction.
+### `GET /api/extractions/:id` / `DELETE /api/extractions/:id`
+Get or delete a specific extraction.
 
 ## License
 

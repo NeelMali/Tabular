@@ -35,8 +35,8 @@ export default function errorHandler(err, _req, res, _next) {
     });
   }
 
-  // Gemini API errors
-  if (err.message && err.message.includes('Gemini')) {
+  // AI API errors (Claude)
+  if (err.message && (err.message.includes('Claude') || err.message.includes('ANTHROPIC'))) {
     return res.status(502).json({
       error: err.message,
       code: 'AI_SERVICE_ERROR'
