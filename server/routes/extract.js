@@ -52,11 +52,27 @@ router.post('/extract', extractionLimiter, upload.single('file'), async (req, re
     let result;
 
     if (isStructuredFile(originalName)) {
-      // ── Excel / CSV: parse directly — all rows, no AI ──
-      console.log(`  📋 Structured file detected — parsing directly (${originalName})`);
+      // ── Excel / CSV: try direct parse first ──
+      console.log(`  📋 Structured file — trying direct parse (${originalName})`);
       result = parseStructured(filePath, originalName, columns);
+
+      // Quality check: if most cells are null, direct parsing failed → use AI
+      if (result && result.length > 0) {
+        const totalCells = result.length * columns.length;
+        const nullCells = result.reduce((n, row) =>
+          n + columns.filter(c => row[c] === null || row[c] === undefined || row[c] === '').length, 0);
+        const nullRatio = nullCells / totalCells;
+
+        if (nullRatio > 0.5) {
+          console.log(`  ⚠️  Direct parse quality poor (${Math.round(nullRatio * 100)}% null) — falling back to AI`);
+          const { text, isImage } = await parseDocument(filePath, originalName);
+          result = await extractWithAI(text, columns, isImage);
+        } else {
+          console.log(`  ✅ Direct parse OK — ${result.length} rows, ${Math.round((1 - nullRatio) * 100)}% filled`);
+        }
+      }
     } else {
-      // ── PDF / Word / Image: send to Claude ──
+      // ── PDF / Word / Image: send to AI ──
       const { text, isImage } = await parseDocument(filePath, originalName);
       result = await extractWithAI(text, columns, isImage);
     }
