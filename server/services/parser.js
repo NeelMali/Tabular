@@ -106,3 +106,65 @@ export function getFileType(originalName) {
   };
   return map[ext] || 'Unknown';
 }
+
+/**
+ * Detect column headers from a document.
+ * For CSV/Excel: reads the first row as headers directly.
+ * For PDF/Word/Images: returns a preview for AI-based detection.
+ *
+ * @param {string} filePath - Absolute path to the uploaded file
+ * @param {string} originalName - Original filename
+ * @returns {{ columns: string[]|null, needsAI: boolean, preview?: string, isImage?: boolean }}
+ */
+export async function detectColumns(filePath, originalName) {
+  const ext = path.extname(originalName).toLowerCase();
+
+  // CSV — parse header row directly
+  if (ext === '.csv') {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const result = Papa.parse(content, { skipEmptyLines: true, preview: 1 });
+    if (result.data.length > 0) {
+      const headers = result.data[0].map(h => String(h).trim()).filter(Boolean);
+      if (headers.length > 0) {
+        return { columns: headers, needsAI: false };
+      }
+    }
+    return { columns: null, needsAI: true, preview: content.slice(0, 3000) };
+  }
+
+  // Excel — read first row of first sheet
+  if (ext === '.xlsx' || ext === '.xls') {
+    const buffer = fs.readFileSync(filePath);
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const firstSheet = wb.Sheets[wb.SheetNames[0]];
+    if (firstSheet) {
+      const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+      if (data.length > 0) {
+        const headers = data[0].map(h => String(h).trim()).filter(Boolean);
+        if (headers.length > 0) {
+          return { columns: headers, needsAI: false };
+        }
+      }
+    }
+    return { columns: null, needsAI: true, preview: parseExcel(filePath).slice(0, 3000) };
+  }
+
+  // PDF / Word — extract a preview for AI detection
+  if (ext === '.pdf') {
+    const text = await parsePdf(filePath);
+    return { columns: null, needsAI: true, preview: text.slice(0, 3000) };
+  }
+
+  if (ext === '.docx') {
+    const text = await parseDocx(filePath);
+    return { columns: null, needsAI: true, preview: text.slice(0, 3000) };
+  }
+
+  // Images — needs vision AI
+  if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+    const imageData = encodeImage(filePath, ext);
+    return { columns: null, needsAI: true, isImage: true, preview: imageData };
+  }
+
+  return { columns: null, needsAI: true, preview: '' };
+}

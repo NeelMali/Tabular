@@ -1,4 +1,12 @@
-const container = document.getElementById('toastContainer');
+/**
+ * Toast notification component.
+ */
+
+const ICONS = {
+  success: 'ti-circle-check',
+  error: 'ti-alert-circle',
+  info: 'ti-info-circle'
+};
 
 /**
  * Show a toast notification.
@@ -7,25 +15,19 @@ const container = document.getElementById('toastContainer');
  * @param {number} duration - Auto-dismiss in milliseconds
  */
 export function showToast(message, type = 'info', duration = 4000) {
-  const icons = {
-    success: 'ti-circle-check',
-    error: 'ti-alert-circle',
-    info: 'ti-info-circle'
-  };
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
 
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.innerHTML = `
-    <i class="ti ${icons[type] || icons.info}"></i>
-    <span>${message}</span>
+    <i class="ti ${ICONS[type] || ICONS.info} toast-icon"></i>
+    <span class="toast-message">${message}</span>
   `;
 
   container.appendChild(toast);
 
-  // Auto-dismiss
   const timer = setTimeout(() => removeToast(toast), duration);
-
-  // Click to dismiss
   toast.addEventListener('click', () => {
     clearTimeout(timer);
     removeToast(toast);
@@ -34,6 +36,6 @@ export function showToast(message, type = 'info', duration = 4000) {
 
 function removeToast(el) {
   if (!el.parentElement) return;
-  el.classList.add('removing');
-  el.addEventListener('animationend', () => el.remove());
+  el.classList.add('hiding');
+  el.addEventListener('animationend', () => el.remove(), { once: true });
 }

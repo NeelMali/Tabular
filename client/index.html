@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TableForge — AI Document Extractor</title>
-  <meta name="description" content="Extract structured data tables from any document using AI. Supports PDF, Excel, Word, CSV, and images.">
+  <title>AI Data Extractor</title>
+  <meta name="description"
+    content="Extract structured data tables from any document using AI. Supports PDF, Excel, Word, CSV, and images.">
   <meta name="theme-color" content="#0f0f0f">
 
   <!-- Fonts -->
@@ -20,16 +22,18 @@
   <link rel="stylesheet" href="/src/styles/components.css">
   <link rel="stylesheet" href="/src/styles/animations.css">
 </head>
+
 <body>
   <div id="app">
     <!-- Top bar -->
     <nav class="topbar" id="topbar">
+
       <div class="topbar-left">
         <div class="logo">
           <div class="logo-icon">
             <i class="ti ti-table-import"></i>
           </div>
-          <span class="logo-text">TableForge</span>
+          <span class="logo-text">Data Extractor</span>
         </div>
       </div>
       <div class="topbar-right">
@@ -65,10 +69,8 @@
       <main class="main">
         <!-- Hero -->
         <section class="hero">
-          <h1 class="hero-title">
-            Extract structured data from <span class="gradient-text">any document</span>
-          </h1>
-          <p class="hero-subtitle">Upload a document, define your columns, and let AI extract perfectly structured tables in seconds.</p>
+          <h1 class="hero-title">Extract data from any document</h1>
+          <p class="hero-subtitle">Upload, define columns, extract.</p>
         </section>
 
         <!-- Steps container -->
@@ -107,6 +109,10 @@
               <h2><i class="ti ti-columns-3"></i> Define Columns</h2>
               <p class="card-desc">Specify the data fields you want to extract</p>
             </div>
+            <button class="btn-detect" id="detectColsBtn" disabled title="Upload a file first">
+              <i class="ti ti-wand"></i>
+              <span>Auto-detect columns</span>
+            </button>
             <div id="colList"></div>
             <button class="btn-add" id="addCol">
               <i class="ti ti-plus"></i>
@@ -144,6 +150,10 @@
                 <span class="badge" id="rowBadge"></span>
               </div>
               <div class="export-row" id="exportRow">
+                <button class="btn-outline" id="addColToResult" style="display:none;">
+                  <i class="ti ti-column-insert-right"></i>
+                  <span>Add column</span>
+                </button>
                 <button class="btn-outline" id="exportCsv">
                   <i class="ti ti-file-type-csv"></i>
                   <span>CSV</span>
@@ -164,7 +174,6 @@
 
         <!-- Footer -->
         <footer class="footer">
-          <p>Built with <i class="ti ti-heart-filled" style="color: var(--danger);"></i> and NVIDIA Gemma 4 AI</p>
         </footer>
       </main>
     </div>
@@ -175,4 +184,5 @@
 
   <script type="module" src="/src/main.js"></script>
 </body>
+
 </html>

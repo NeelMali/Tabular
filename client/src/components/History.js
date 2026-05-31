@@ -1,82 +1,77 @@
 import { getHistory, getExtraction, deleteExtraction } from '../api.js';
 import { showToast } from './Toast.js';
 
+let _initialized = false;
+let _onLoad = null;
+
 /**
- * History sidebar component.
+ * Initialize the History sidebar. Safe to call once only.
  */
 export function initHistory(onLoadExtraction) {
-  const sidebar = document.getElementById('sidebar');
-  const historyToggle = document.getElementById('historyToggle');
-  const sidebarClose = document.getElementById('sidebarClose');
-  const historyList = document.getElementById('historyList');
+  _onLoad = onLoadExtraction;
 
-  // Toggle sidebar
-  historyToggle.addEventListener('click', () => {
-    sidebar.classList.toggle('open');
-    if (sidebar.classList.contains('open')) {
-      refreshHistory();
-    }
-  });
+  if (_initialized) return;
+  _initialized = true;
 
-  sidebarClose.addEventListener('click', () => {
-    sidebar.classList.remove('open');
-  });
+  const sidebar      = document.getElementById('sidebar');
+  const historyList  = document.getElementById('historyList');
 
-  // Close on escape
-  document.addEventListener('keydown', (e) => {
+  // Close on Escape
+  document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && sidebar.classList.contains('open')) {
       sidebar.classList.remove('open');
     }
   });
 
+  // Auto-load history when sidebar opens via historyToggle (defined in main.js)
+  sidebar.addEventListener('transitionend', () => {
+    if (sidebar.classList.contains('open')) refreshHistory();
+  });
+
   async function refreshHistory() {
+    historyList.innerHTML = '<div class="empty-state"><div class="spinner" style="margin:auto"></div></div>';
     try {
       const items = await getHistory();
-      renderHistoryList(items);
+      renderList(items);
     } catch {
       historyList.innerHTML = `
         <div class="empty-state">
           <i class="ti ti-alert-circle"></i>
           <p>Failed to load history</p>
-        </div>
-      `;
+        </div>`;
     }
   }
 
-  function renderHistoryList(items) {
+  function renderList(items) {
     if (!items.length) {
       historyList.innerHTML = `
         <div class="empty-state">
           <i class="ti ti-archive-off"></i>
           <p>No extractions yet</p>
-        </div>
-      `;
+        </div>`;
       return;
     }
 
     historyList.innerHTML = '';
-    items.forEach((item) => {
+    items.forEach(item => {
       const el = document.createElement('div');
       el.className = 'history-item';
       el.innerHTML = `
-        <div class="hi-name" title="${escapeAttr(item.filename)}">${escapeHtml(item.filename)}</div>
+        <div class="hi-name" title="${escAttr(item.filename)}">${escHtml(item.filename)}</div>
         <div class="hi-meta">
           <span class="hi-badge">${item.file_type || 'File'}</span>
           <span>${item.row_count} row${item.row_count === 1 ? '' : 's'}</span>
           <span>·</span>
-          <span>${formatDate(item.created_at)}</span>
+          <span>${timeAgo(item.created_at)}</span>
         </div>
-        <button class="hi-delete" title="Delete">
-          <i class="ti ti-trash"></i>
-        </button>
+        <button class="hi-delete" title="Delete"><i class="ti ti-trash"></i></button>
       `;
 
-      // Load on click
-      el.addEventListener('click', async (e) => {
+      el.addEventListener('click', async e => {
         if (e.target.closest('.hi-delete')) return;
         try {
           const full = await getExtraction(item.id);
-          onLoadExtraction(full);
+          if (_onLoad) _onLoad(full);
           sidebar.classList.remove('open');
           showToast(`Loaded "${item.filename}"`, 'success');
         } catch {
@@ -84,23 +79,18 @@ export function initHistory(onLoadExtraction) {
         }
       });
 
-      // Delete button
-      el.querySelector('.hi-delete').addEventListener('click', async (e) => {
+      el.querySelector('.hi-delete').addEventListener('click', async e => {
         e.stopPropagation();
         try {
           await deleteExtraction(item.id);
           el.style.transition = 'opacity 0.2s, transform 0.2s';
           el.style.opacity = '0';
           el.style.transform = 'translateX(20px)';
-          setTimeout(() => el.remove(), 200);
-          showToast('Extraction deleted', 'info');
-
-          // Check if list is empty after deletion
           setTimeout(() => {
-            if (!historyList.children.length) {
-              renderHistoryList([]);
-            }
-          }, 250);
+            el.remove();
+            if (!historyList.querySelector('.history-item')) renderList([]);
+          }, 220);
+          showToast('Deleted', 'info');
         } catch {
           showToast('Failed to delete', 'error');
         }
@@ -109,32 +99,25 @@ export function initHistory(onLoadExtraction) {
       historyList.appendChild(el);
     });
   }
-
-  return { refreshHistory };
 }
 
-function formatDate(isoStr) {
+// ── Helpers ──
+
+function timeAgo(iso) {
   try {
-    const d = new Date(isoStr);
-    const now = new Date();
-    const diffMs = now - d;
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-    if (diffMins < 10080) return `${Math.floor(diffMins / 1440)}d ago`;
-
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  } catch {
-    return '';
-  }
+    const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+    if (mins < 10080) return `${Math.floor(mins / 1440)}d ago`;
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch { return ''; }
 }
 
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function escapeAttr(str) {
-  return str.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function escAttr(s) {
+  return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }

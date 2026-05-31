@@ -2,9 +2,6 @@ const API_BASE = '/api';
 
 /**
  * Extract data from a document file.
- * @param {File} file - The document file
- * @param {string[]} columns - Column names to extract
- * @returns {Promise<Object>} Extraction result with data array
  */
 export async function extractData(file, columns) {
   const formData = new FormData();
@@ -25,8 +22,36 @@ export async function extractData(file, columns) {
 }
 
 /**
+ * Auto-detect column headers from a file.
+ */
+export async function detectColumns(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_BASE}/detect-columns`, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `Request failed (${res.status})` }));
+    throw new Error(err.error || `Column detection failed with status ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Get available AI providers and models.
+ */
+export async function getProviders() {
+  const res = await fetch(`${API_BASE}/providers`);
+  if (!res.ok) throw new Error('Failed to fetch providers');
+  return res.json();
+}
+
+/**
  * Get extraction history.
- * @returns {Promise<Object[]>} Array of past extractions
  */
 export async function getHistory() {
   const res = await fetch(`${API_BASE}/extractions`);
@@ -36,8 +61,6 @@ export async function getHistory() {
 
 /**
  * Get a single extraction by ID.
- * @param {number} id
- * @returns {Promise<Object>} Full extraction with result data
  */
 export async function getExtraction(id) {
   const res = await fetch(`${API_BASE}/extractions/${id}`);
@@ -47,8 +70,6 @@ export async function getExtraction(id) {
 
 /**
  * Delete an extraction record.
- * @param {number} id
- * @returns {Promise<void>}
  */
 export async function deleteExtraction(id) {
   const res = await fetch(`${API_BASE}/extractions/${id}`, { method: 'DELETE' });

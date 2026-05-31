@@ -1,124 +1,120 @@
-# TableForge — AI Document Table Extractor
+# AI Data Extractor
 
-Extract structured data tables from **any document** using Google Gemini AI. Upload a PDF, Excel, Word, CSV, or image file, define your output columns, and get a perfectly formatted table in seconds.
+Upload a document, define what columns you want, and get a clean, editable data table — exported as CSV, Excel, or JSON.
 
-## ✨ Features
+## Features
 
-- **Multi-format support** — PDF, Excel (.xlsx/.xls), Word (.docx), CSV, Images (JPG, PNG, WebP)
-- **AI-powered extraction** — Google Gemini 2.0 Flash for intelligent data parsing
-- **Structured output** — Define exactly which columns you want
-- **Export** — Download results as CSV, Excel, or JSON
-- **Extraction history** — Browse and re-load past extractions
-- **Dark mode** — System-aware with manual toggle
-- **Production-ready** — Rate limiting, security headers, error handling, SQLite persistence
+- **Formats** — PDF, Excel (.xlsx/.xls), Word (.docx), CSV, Images (JPG, PNG, WebP)
+- **AI Extraction** — Powered by [Groq](https://console.groq.com) (Llama 4 Scout) by default; configurable via `.env`
+- **Auto-detect columns** — Let AI suggest headers from your document
+- **Inline editing** — Click any cell to edit; add/delete rows and columns after extraction
+- **Export** — Download as CSV, Excel, or JSON
+- **History** — Browse and reload past extractions (SQLite persistence)
+- **Dark/Light mode** — Toggle in the top bar
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Clone & Install
+### 1. Install
 
 ```bash
-cd Summariser
 npm install
 ```
 
 ### 2. Configure
 
-Copy the example env file and add your Gemini API key:
-
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
-```
-GEMINI_API_KEY=your_api_key_here
-```
+Edit `.env` — at minimum add one API key:
 
-Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+```env
+GROQ_API_KEY=your_key_here
+# GOOGLE_API_KEY=...
+# OPENAI_API_KEY=...
+# ANTHROPIC_API_KEY=...
+```
 
 ### 3. Run
 
+**Development** (hot reload):
 ```bash
 npm run dev
 ```
+Open [http://localhost:5173](http://localhost:5173)
 
-This starts both the backend (port 3000) and frontend (port 5173) with hot reload.
-
-Open **http://localhost:5173** in your browser.
-
-### Production
-
+**Production:**
 ```bash
 npm run build
 npm start
 ```
+Serves everything from Express on port 3000.
 
-Serves the built frontend from Express on port 3000.
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-├── server/                    # Express backend
-│   ├── index.js               # Server entry + middleware
-│   ├── routes/extract.js      # API endpoints
+├── server/
+│   ├── index.js               # Express server
+│   ├── routes/extract.js      # API routes
 │   ├── services/parser.js     # Document parsing
-│   ├── services/gemini.js     # Gemini AI integration
-│   ├── db/database.js         # SQLite persistence
-│   └── middleware/            # Upload, rate limit, errors
-├── client/                    # Vite frontend
+│   ├── services/gemini.js     # Multi-provider AI
+│   ├── db/database.js         # SQLite
+│   └── middleware/            # Upload, rate-limit, errors
+├── client/
 │   ├── index.html
 │   └── src/
-│       ├── main.js            # App orchestration
-│       ├── api.js             # Backend API client
-│       ├── components/        # UI components
-│       └── styles/            # CSS design system
-├── .env                       # Environment config (not in git)
-├── .env.example               # Template
+│       ├── main.js
+│       ├── api.js
+│       ├── components/
+│       └── styles/
+├── .env.example
 └── package.json
 ```
 
-## 🔧 Environment Variables
+## Environment Variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `GEMINI_API_KEY` | — | **Required.** Google AI API key |
+|---|---|---|
+| `GROQ_API_KEY` | — | Groq API key (default provider) |
+| `GOOGLE_API_KEY` | — | Google Gemini API key |
+| `OPENAI_API_KEY` | — | OpenAI API key |
+| `ANTHROPIC_API_KEY` | — | Anthropic Claude API key |
 | `PORT` | `3000` | Server port |
-| `MAX_FILE_SIZE_MB` | `20` | Maximum upload size |
-| `RATE_LIMIT_PER_MIN` | `10` | Rate limit for extraction endpoint |
+| `MAX_FILE_SIZE_MB` | `20` | Max upload size |
+| `RATE_LIMIT_PER_MIN` | `10` | Extraction rate limit |
 
-## 📡 API Reference
+## API
 
 ### `POST /api/extract`
-Upload a file and extract data.
+Upload a file and extract structured data.
 
 **Body** (multipart/form-data):
-- `file` — Document file
-- `columns` — JSON array string, e.g. `'["Name","Email","Phone"]'`
+- `file` — Document
+- `columns` — JSON array, e.g. `'["Name","Email","Phone"]'`
 
 **Response:**
 ```json
 {
   "id": 1,
   "filename": "contacts.pdf",
-  "fileType": "PDF",
-  "columns": ["Name", "Email", "Phone"],
-  "data": [{ "Name": "John", "Email": "john@example.com", "Phone": "555-0123" }],
+  "columns": ["Name", "Email"],
+  "data": [{ "Name": "Jane", "Email": "jane@example.com" }],
   "rowCount": 1
 }
 ```
 
+### `POST /api/detect-columns`
+Auto-detect column headers from a document.
+
 ### `GET /api/extractions`
-List past extractions (last 50).
+List last 50 extractions.
 
 ### `GET /api/extractions/:id`
-Get a specific extraction with full result data.
+Get a specific extraction.
 
 ### `DELETE /api/extractions/:id`
-Delete an extraction record.
+Delete an extraction.
 
-### `GET /api/health`
-Health check endpoint.
-
-## 📄 License
+## License
 
 MIT
