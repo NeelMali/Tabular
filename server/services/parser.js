@@ -89,8 +89,8 @@ export async function detectColumns(filePath, originalName) {
   // ── Structured: read header row directly ──
   if (ext === '.csv') {
     const content = fs.readFileSync(filePath, 'utf-8');
-    const result = Papa.parse(content, { skipEmptyLines: true, preview: 1 });
-    const headers = result.data[0]?.map(h => String(h).trim()).filter(Boolean) || [];
+    const result = smartParseCsv(content, true);
+    const headers = result.meta?.fields?.map(h => String(h).trim()).filter(Boolean) || [];
     if (headers.length) return { columns: headers, needsAI: false };
     return { columns: null, needsAI: true, preview: content.slice(0, 3000) };
   }
@@ -187,10 +187,11 @@ function parseExcelRows(filePath, requestedCols) {
 
 /**
  * Parse ALL rows from CSV, mapped to requested columns.
+ * Tries multiple delimiters if auto-detect gives only 1 column.
  */
 function parseCsvRows(filePath, requestedCols) {
   const content = fs.readFileSync(filePath, 'utf-8');
-  const result = Papa.parse(content, { header: true, skipEmptyLines: true, dynamicTyping: false });
+  const result = smartParseCsv(content, true);
   return result.data.map(srcRow => mapRow(srcRow, requestedCols));
 }
 
@@ -199,8 +200,42 @@ function parseCsvRows(filePath, requestedCols) {
  */
 function parseCsvText(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
-  const result = Papa.parse(content, { skipEmptyLines: true });
-  return result.data.map(row => row.join('\t')).join('\n');
+  const result = smartParseCsv(content, false);
+  return result.data.map(row => (Array.isArray(row) ? row.join('\t') : Object.values(row).join('\t'))).join('\n');
+}
+
+/**
+ * Try parsing CSV with auto-detect first, then fall back to common delimiters.
+ * Returns the PapaParse result with the most columns.
+ */
+function smartParseCsv(content, withHeader) {
+  const opts = { skipEmptyLines: true, dynamicTyping: false };
+  if (withHeader) opts.header = true;
+
+  // Try auto-detect first
+  let best = Papa.parse(content, opts);
+  let bestColCount = countCols(best, withHeader);
+
+  // If auto-detect only found 1 column, try common delimiters
+  if (bestColCount <= 1) {
+    for (const delim of ['|', '\t', ';', ',']) {
+      const attempt = Papa.parse(content, { ...opts, delimiter: delim });
+      const cols = countCols(attempt, withHeader);
+      if (cols > bestColCount) {
+        best = attempt;
+        bestColCount = cols;
+      }
+    }
+  }
+
+  return best;
+}
+
+function countCols(result, withHeader) {
+  if (withHeader) {
+    return result.meta?.fields?.length || 0;
+  }
+  return result.data?.[0]?.length || 0;
 }
 
 /**
