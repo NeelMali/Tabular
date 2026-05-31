@@ -1,14 +1,11 @@
 /**
- * AI service — calls Anthropic Claude API directly via fetch.
- * No external SDK required.
- *
+ * AI service — calls Groq API (OpenAI-compatible format).
  * Only used for unstructured documents (PDF, Word, Image).
  * Excel/CSV are parsed directly by parser.js — no AI needed.
  */
 
-const DEFAULT_MODEL  = 'claude-sonnet-4-20250514';
-const API_URL        = 'https://api.anthropic.com/v1/messages';
-const API_VERSION    = '2023-06-01';
+const DEFAULT_MODEL  = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const API_URL        = 'https://api.groq.com/openai/v1/chat/completions';
 const MAX_TEXT_CHARS  = 100_000;
 
 // ── Prompts ─────────────────────────────────────────────────────────────────
@@ -34,39 +31,44 @@ Rules:
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function getApiKey() {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = process.env.GROQ_API_KEY;
   if (!key) {
     throw Object.assign(
-      new Error('ANTHROPIC_API_KEY is not set in .env'),
+      new Error('GROQ_API_KEY is not set in .env'),
       { statusCode: 503 }
     );
   }
   return key;
 }
 
-async function callClaude(system, messages, maxTokens = 8192) {
+async function callGroq(systemPrompt, userContent, maxTokens = 8192) {
   const apiKey = getApiKey();
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userContent },
+  ];
 
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': API_VERSION,
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: DEFAULT_MODEL,
-      max_tokens: maxTokens,
-      system,
       messages,
+      max_tokens: maxTokens,
+      temperature: 0,
+      response_format: { type: 'json_object' },
     }),
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    console.error(`  ❌ Claude API error (${res.status}): ${body}`);
+    console.error(`  ❌ Groq API error (${res.status}): ${body}`);
     throw Object.assign(
-      new Error(`Claude API error: ${res.status} — ${body.slice(0, 200)}`),
+      new Error(`Groq API error: ${res.status} — ${body.slice(0, 200)}`),
       { statusCode: 502 }
     );
   }
@@ -74,10 +76,10 @@ async function callClaude(system, messages, maxTokens = 8192) {
   const data = await res.json();
 
   if (data.usage) {
-    console.log(`  📊 Claude (${DEFAULT_MODEL}) — input: ${data.usage.input_tokens}, output: ${data.usage.output_tokens} tokens`);
+    console.log(`  📊 Groq (${DEFAULT_MODEL}) — input: ${data.usage.prompt_tokens}, output: ${data.usage.completion_tokens} tokens`);
   }
 
-  const text = data.content?.find(b => b.type === 'text')?.text || '';
+  const text = data.choices?.[0]?.message?.content || '';
   return text;
 }
 
@@ -89,19 +91,18 @@ function parseJSON(raw) {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Extract structured data from a document using Claude.
+ * Extract structured data from a document using Groq.
  * Only called for PDF / Word / Image — Excel & CSV are parsed directly.
  */
 export async function extractWithAI(content, columns, isImage) {
   let userContent;
 
   if (isImage) {
-    const [meta, b64data] = content.split(',');
-    const mediaType = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+    // Groq vision: send image as base64 URL in content array
     userContent = [
       {
-        type: 'image',
-        source: { type: 'base64', media_type: mediaType, data: b64data },
+        type: 'image_url',
+        image_url: { url: content },
       },
       {
         type: 'text',
@@ -113,7 +114,7 @@ export async function extractWithAI(content, columns, isImage) {
     userContent = `Extract these columns: ${columns.join(', ')}\n\nDocument:\n"""\n${truncated}\n"""\n\nReturn ALL rows. Output JSON only.`;
   }
 
-  const raw = await callClaude(EXTRACT_SYSTEM, [{ role: 'user', content: userContent }]);
+  const raw = await callGroq(EXTRACT_SYSTEM, userContent);
 
   let parsed;
   try {
@@ -137,18 +138,16 @@ export async function extractWithAI(content, columns, isImage) {
 }
 
 /**
- * Detect column headers from an unstructured document using Claude.
+ * Detect column headers from an unstructured document using Groq.
  */
 export async function detectColumnsWithAI(preview, isImage) {
   let userContent;
 
   if (isImage) {
-    const [meta, b64data] = preview.split(',');
-    const mediaType = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
     userContent = [
       {
-        type: 'image',
-        source: { type: 'base64', media_type: mediaType, data: b64data },
+        type: 'image_url',
+        image_url: { url: preview },
       },
       { type: 'text', text: 'Detect the column names/fields in this image. Output JSON only.' },
     ];
@@ -156,7 +155,7 @@ export async function detectColumnsWithAI(preview, isImage) {
     userContent = `Detect the column names from this document excerpt:\n\n"""\n${preview}\n"""\n\nOutput JSON only.`;
   }
 
-  const raw = await callClaude(DETECT_SYSTEM, [{ role: 'user', content: userContent }], 1024);
+  const raw = await callGroq(DETECT_SYSTEM, userContent, 1024);
 
   try {
     const parsed = parseJSON(raw);

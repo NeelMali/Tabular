@@ -35,8 +35,8 @@ export default function errorHandler(err, _req, res, _next) {
     });
   }
 
-  // AI API errors (Claude)
-  if (err.message && (err.message.includes('Claude') || err.message.includes('ANTHROPIC'))) {
+  // AI API errors (Groq)
+  if (err.message && (err.message.includes('Groq') || err.message.includes('GROQ'))) {
     return res.status(502).json({
       error: err.message,
       code: 'AI_SERVICE_ERROR'
